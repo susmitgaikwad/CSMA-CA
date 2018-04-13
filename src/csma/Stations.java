@@ -3,46 +3,24 @@ package csma;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.Scanner;
 
 public class Stations extends Thread
 {
-	static Thread t1 = new Thread();
-	static Thread t2 = new Thread();
+	static AP ap = new AP();
 	
 	static int sifs, difs, data1, data2;
+	
+	static int r = 1000;
 	
 	public Stations() 
 	{
 		// TODO Auto-generated constructor stub
 	}
-	
-	
-	public void backoff(Thread t11, Thread t22) throws InterruptedException
-	{
-		Random ran = new Random();
-		int x = ran.nextInt(6) + 0;
-		int y = ran.nextInt(6) + 0;
-		System.out.println("\nT1 backoff: "+x);
-		System.out.println("T2 backoff: "+y);
 		
-		if(x!=y) 
-		{
-			int c = Math.min(x, y); // select station with minimum backoff
-			if (c == x)
-				run(t11, t22, sifs, difs, data1, data2);
-			else
-				run(t22, t11,  sifs, difs, data2, data1);
-		}
-		else if(x==y) // collision detection
-		{
-			System.out.println("Collision Detected! Try again");
-			backoff(t1, t2);
-		}
-		
-	}
-	
 	public static boolean isidle()
 	{ 
 		try 
@@ -57,65 +35,121 @@ public class Stations extends Thread
 		}
 	} 
 	
-	public static void run(Thread t_1,Thread t_2, int sifs, int difs, int data, int data2)
+	public static void assignBackoff(Thread t, HashMap<Thread, Integer> map)
+	{
+		Random ran = new Random();
+		int x = ran.nextInt(6) + 0;
+		System.out.println(t.getName()+ " backoff count: "+x);
+		if(!map.containsValue(x))
+			map.put(t, x);
+		else
+		{
+			System.out.println("\nCollision detected. Trying new backoff value");
+			assignBackoff(t, map);
+		}
+	}
+	
+	public static void getMinBackoff(HashMap<Thread, Integer> map)
+	{
+		if(map.isEmpty())
+		{
+			System.out.println("Channel is idle again...");
+		}
+		
+		else if(!map.isEmpty())
+		{
+			try {
+				String name = "";
+				int min = Collections.min(map.values());
+				Thread t;
+				
+				for(Map.Entry<Thread, Integer> entry: map.entrySet())
+				{
+					if(entry.getValue().equals(min))
+					{
+						
+						t = entry.getKey();
+						System.out.println("\n"+t.getName() + " has least backoff and can start sending");
+						map.remove(t);
+						run(t,sifs, difs, data1, map);
+					}
+						
+				}
+			} catch (Exception e) 
+			{
+				// TODO Auto-generated catch block
+				e.getMessage();
+			}
+		}	
+	}
+	
+	public static void run(Thread t, int sifs, int difs, int data, HashMap<Thread, Integer> map)
 	{
 		try 
         {
 	        Boolean bln = false;
-			int duration = (1000 + (sifs*1000) + 1000 + (sifs*1000) + (data*1000) + (sifs*1000) + 1000) / 1000;
+			int duration = (r + (sifs*1000) + r + (sifs*1000) + (data*1000) + (sifs*1000) + r) / 1000;
 			for (int k = 1; k <= 15; k++) 
 			{
-				System.out.println("\n" + t_1.getName() + " attempt : " + k);
+				System.out.println("\n" + t.getName() + " attempt : " + k);
 
 				// is idle channel? 
 				System.out.println("Is Channel idle? ");
 				while (true) {
 					if (isidle()) {
 						System.out.println("Channel idle");
-						System.out.println(t_1.getName() + " starting to transmit. Duration of " + duration
-								+ " seconds announced by " + t_1.getName());
+						System.out.println(t.getName() + " starting to transmit. Duration of " + duration
+								+ " seconds announced by " + t.getName());
 						System.out.println("RTS sent");
 						// wait for RTS time 
-						t_1.sleep(1000);
+						t.sleep(r);
 						System.out.println("SIFS");
 						// wait for SIFS time 
-						t_1.sleep(sifs*1000);
-						System.out.println("CTS recieved");
+						t.sleep(sifs*1000);
+						ap.sendCTS();
 						// wait for CTS time 
-						t_1.sleep(1000);
+						t.sleep(r);
 						System.out.println("SIFS");
 						// wait for SIFS time 
-						t_1.sleep(sifs*1000);
+						t.sleep(sifs*1000);
 
 						// send frame 
-						System.out.println(t_1.getName() + " Data sent");
-						t_1.sleep(data*1000);
+						System.out.println(t.getName() + " Data sent");
+						t.sleep(data*1000);
 						System.out.println("SIFS");
-						t_1.sleep(sifs*1000);
+						t.sleep(sifs*1000);
 
 						// ack check 
-						if (isidle()) {
-							System.out.println("ACK received at " + t_1.getName());
-							bln = true;
+						if (isidle()) 
+						{
+							ap.sendACK(t);
+							t.sleep(r);
+							bln = true;	
+							//boolean flag set to true if acknowledgement received
+							
 							System.out.println("\nDIFS");
 							// wait for DIFS time in between transmissions
-							t_1.sleep(difs*1000);
-							if(t_2 != null)
-								run(t_2, null, sifs, difs, data2, data); // for second station transmission
-							else
-								System.out.println("Channel is idle again...");
+							t.sleep(difs*1000);
+							
+							// for next station transmissions
+							getMinBackoff(map);
 							break;
-						} else {
+							
+						} 
+						
+						else 
+						{
 							System.out.println("ACK not received");
 							break;
 						}
-					} else {
+					} 
+					else 
+					{
 						System.out.println("Busy, back to channel idle check");
 					}
 				}
-				if (bln == true) {
+				if (bln == true)
 					break;
-				}
 			} 
 				
 	        
@@ -131,7 +165,7 @@ public class Stations extends Thread
 		try 
 		{
 			boolean idle = isidle();
-			while (idle) 
+			while (true) 
 			{
 				Scanner scan = new Scanner(System.in);
 				System.out.println("Enter the SIFS duration in seconds:");
@@ -140,20 +174,22 @@ public class Stations extends Thread
 				difs = scan.nextInt();
 				System.out.println("Enter the data frame length for Station 1 in seconds:");
 				data1 = scan.nextInt();
-				System.out.println("Enter the data frame length for Station 2 in seconds:");
-				data2 = scan.nextInt();
-				Stations st = new Stations();
-				t1.setName("Station 1");
-				t2.setName("Station 2");
-				st.backoff(t1, t2);
+				
+				System.out.println("How many stations do you want?");
+				int n = scan.nextInt();
+				HashMap<Thread, Integer> map = new HashMap<>();
+				
+				for(int i=1;i<n+1;i++)
+				{
+					Thread t = new Thread("Station "+i);
+					assignBackoff(t, map);
+				}
+				getMinBackoff(map);
+				
 				System.out.println("\nTrasmit again? (y/n)");
 				char reply = scan.next().charAt(0);
 				if(reply == 'n')
-				{
-					idle = false;
 					break;
-				}	
-				
 			}
 		} 
 		catch (Exception e) 
