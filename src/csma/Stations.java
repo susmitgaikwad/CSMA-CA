@@ -12,7 +12,7 @@ public class Stations extends Thread
 {
 	static AP ap = new AP();
 	
-	static int sifs, difs, data1, data2;
+	static int sifs, difs, data;
 	
 	static int r = 1000;
 	
@@ -35,28 +35,24 @@ public class Stations extends Thread
 		}
 	} 
 	
-	public static void assignBackoff(Thread t, HashMap<Thread, Integer> map)
+	public static void assignBackoff(Thread t, HashMap<Thread, Integer> map, int CW)
 	{
 		Random ran = new Random();
-		int x = ran.nextInt(6) + 0;
+		int x = ran.nextInt(CW);
 		System.out.println(t.getName()+ " backoff count: "+x);
 		if(!map.containsValue(x))
 			map.put(t, x);
 		else
 		{
 			System.out.println("\nCollision detected. Trying new backoff value");
-			assignBackoff(t, map);
+			assignBackoff(t, map,CW);
 		}
 	}
 	
-	public static void getMinBackoff(HashMap<Thread, Integer> map)
+	public static void selectMinBackoff(HashMap<Thread, Integer> map)
 	{
-		if(map.isEmpty())
-		{
-			System.out.println("Channel is idle again...");
-		}
 		
-		else if(!map.isEmpty())
+		while(!map.isEmpty())
 		{
 			try {
 				String name = "";
@@ -71,10 +67,13 @@ public class Stations extends Thread
 						t = entry.getKey();
 						System.out.println("\n"+t.getName() + " has least backoff and can start sending");
 						map.remove(t);
-						run(t,sifs, difs, data1, map);
+						run(t,sifs, difs, data);
 					}
 						
 				}
+				
+				System.out.println("\nChannel is idle again...");
+				
 			} catch (Exception e) 
 			{
 				// TODO Auto-generated catch block
@@ -83,7 +82,7 @@ public class Stations extends Thread
 		}	
 	}
 	
-	public static void run(Thread t, int sifs, int difs, int data, HashMap<Thread, Integer> map)
+	public static void run(Thread t, int sifs, int difs, int data)
 	{
 		try 
         {
@@ -132,7 +131,6 @@ public class Stations extends Thread
 							t.sleep(difs*1000);
 							
 							// for next station transmissions
-							getMinBackoff(map);
 							break;
 							
 						} 
@@ -172,19 +170,19 @@ public class Stations extends Thread
 				sifs = scan.nextInt();
 				System.out.println("Enter the DIFS duration in seconds:");
 				difs = scan.nextInt();
-				System.out.println("Enter the data frame length for Station 1 in seconds:");
-				data1 = scan.nextInt();
+				System.out.println("Enter the data frame length for stations in seconds:");
+				data = scan.nextInt();
 				
 				System.out.println("How many stations do you want?");
 				int n = scan.nextInt();
 				HashMap<Thread, Integer> map = new HashMap<>();
-				
+				int cw = n+2;
 				for(int i=1;i<n+1;i++)
 				{
 					Thread t = new Thread("Station "+i);
-					assignBackoff(t, map);
+					assignBackoff(t, map, cw);
 				}
-				getMinBackoff(map);
+				selectMinBackoff(map);
 				
 				System.out.println("\nTrasmit again? (y/n)");
 				char reply = scan.next().charAt(0);
